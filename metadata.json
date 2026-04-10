@@ -1,0 +1,5 @@
+{
+  "name": "Relief-Map",
+  "description": "A real-time emergency response web app for GDG Hackathon, featuring live proximity feeds, multimodal dispatching, and Gemini AI-powered urgency analysis.",
+  "requestFramePermissions": ["geolocation"]
+}

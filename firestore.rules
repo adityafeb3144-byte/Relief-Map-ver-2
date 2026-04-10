@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: requests
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required) - The UID of the user who made the request.
+    //   - userName: string (optional) - The name of the user.
+    //   - userPhoto: string (optional) - The photo URL of the user.
+    //   - message: string (required, max 1000) - The help message.
+    //   - imageUrl: string (optional, URL) - Optional image URL.
+    //   - location: map (required) - { lat: number, lng: number }
+    //   - category: string (required) - enum ["Food", "Medical", "Rescue", "Other"]
+    //   - urgency: number (required, 1-10) - Urgency score.
+    //   - createdAt: timestamp (required) - Creation time.
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidRequest(data) {
+      let requiredFields = ['userId', 'message', 'location', 'category', 'urgency', 'createdAt'];
+      let allowedFields = ['userId', 'userName', 'userPhoto', 'message', 'imageUrl', 'location', 'category', 'urgency', 'createdAt'];
+      
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(allowedFields) &&
+             data.userId == request.auth.uid &&
+             data.message is string && data.message.size() <= 1000 &&
+             data.location is map && data.location.lat is number && data.location.lng is number &&
+             data.category in ['Food', 'Medical', 'Rescue', 'Other'] &&
+             data.urgency is number && data.urgency >= 1 && data.urgency <= 10 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /requests/{requestId} {
+      // Allow reading requests if authenticated
+      // In a real app, we might limit this to proximity, but Firestore rules can't easily do geo-queries.
+      // We rely on the client-side query and this basic auth check.
+      allow read: if isAuthenticated();
+      
+      // Allow creating a request if valid and user is the owner
+      allow create: if isAuthenticated() && isValidRequest(request.resource.data);
+      
+      // Allow updating only by the owner, and must remain valid
+      allow update: if isAuthenticated() && isOwner(resource.data.userId) && isValidRequest(request.resource.data);
+      
+      // Allow deleting only by the owner
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+  }
+}
