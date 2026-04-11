@@ -8,7 +8,7 @@ import {
   useMap
 } from '@vis.gl/react-google-maps';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { EmergencyRequest, UserLocation } from '../types';
 import { AlertCircle, Heart, Utensils, LifeBuoy, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -166,6 +166,8 @@ export default function MapComponent({ userLocation }: Props) {
       setRequests(allRequests);
       setFilteredRequests(viewMode === 'local' ? nearby : allRequests);
       isInitialLoad.current = false;
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'requests');
     });
 
     return () => unsubscribe();

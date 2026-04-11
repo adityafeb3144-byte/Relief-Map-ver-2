@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Send, Image as ImageIcon, X, Loader2 } from 'lucide-react';
 import { analyzeEmergency } from '../lib/gemini';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { UserLocation } from '../types';
 
 interface Props {
@@ -31,32 +31,63 @@ export default function RequestHelpButton({ userLocation }: Props) {
   const handleSubmit = async () => {
     if (!message.trim() || isSubmitting) return;
 
+    if (!auth.currentUser) {
+      alert('You must be signed in to request help.');
+      return;
+    }
+
+    // Check image size (Firestore limit is 1MB per document)
+    if (image && image.length > 800000) { // ~800KB limit to be safe
+      alert('The image is too large. Please use a smaller photo (under 800KB).');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // 1. Analyze with Gemini
       const base64Image = image?.split(',')[1];
       const analysis = await analyzeEmergency(message, base64Image);
+      
+      console.log('Gemini Analysis:', analysis);
 
       // 2. Save to Firestore
-      await addDoc(collection(db, 'requests'), {
-        userId: auth.currentUser?.uid,
-        userName: auth.currentUser?.displayName,
-        userPhoto: auth.currentUser?.photoURL,
-        message,
-        imageUrl: image, // In a real app, upload to Storage first
-        location: userLocation,
-        category: analysis.category,
-        urgency: analysis.urgency,
-        createdAt: serverTimestamp(),
-      });
+      const allowedCategories = ['Food', 'Medical', 'Rescue', 'Other'];
+      const finalCategory = allowedCategories.includes(analysis.category) ? analysis.category : 'Other';
+      const finalUrgency = typeof analysis.urgency === 'number' ? Math.min(Math.max(analysis.urgency, 1), 10) : 5;
+
+      try {
+        await addDoc(collection(db, 'requests'), {
+          userId: auth.currentUser.uid,
+          userName: auth.currentUser.displayName || 'Anonymous',
+          userPhoto: auth.currentUser.photoURL || '',
+          message,
+          imageUrl: image || null,
+          location: userLocation,
+          category: finalCategory,
+          urgency: finalUrgency,
+          createdAt: serverTimestamp(),
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, 'requests');
+      }
 
       // 3. Reset and Close
       setMessage('');
       setImage(null);
       setIsOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting request:', error);
-      alert('Failed to submit request. Please try again.');
+      let errorMsg = 'Failed to submit request. Please try again.';
+      
+      if (error.message?.includes('permission-denied')) {
+        errorMsg = 'Permission denied. This might be due to a large image or invalid data. Try removing the photo or shortening the message.';
+      } else if (error.message?.includes('Gemini') || error.message?.includes('API key')) {
+        errorMsg = 'AI analysis failed. Please ensure your Gemini API key is correctly set in Vercel.';
+      } else if (error.code) {
+        errorMsg = `Error (${error.code}): ${error.message}`;
+      }
+      
+      alert(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
