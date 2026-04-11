@@ -463,60 +463,74 @@ export default function MapComponent({ userLocation }: Props) {
 
                 {/* Action Buttons */}
                 <div className="flex flex-col gap-2 mb-4">
-                  {/* Requester can cancel */}
-                  {selectedRequest.status === 'pending' && selectedRequest.userId === auth.currentUser?.uid && (
-                    <button
-                      onClick={() => handleCancelRequest(selectedRequest)}
-                      disabled={isAccepting}
-                      className="w-full py-2.5 bg-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-300 transition-all flex items-center justify-center gap-2"
-                    >
-                      {isAccepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                      Cancel My Request
-                    </button>
-                  )}
-
-                  {/* Responder or Requester can complete */}
-                  {selectedRequest.status === 'accepted' && (selectedRequest.userId === auth.currentUser?.uid || selectedRequest.acceptedBy === auth.currentUser?.uid) && (
-                    <button
-                      onClick={() => handleCompleteRequest(selectedRequest)}
-                      disabled={isAccepting}
-                      className="w-full py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-green-700 transition-all flex items-center justify-center gap-2"
-                    >
-                      {isAccepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                      Help Received / Mission Complete
-                    </button>
-                  )}
-
-                  {selectedRequest.status === 'pending' && selectedRequest.userId !== auth.currentUser?.uid && (
+                  {/* REQUESTER ACTIONS */}
+                  {selectedRequest.userId === auth.currentUser?.uid ? (
                     <>
-                      {getDistance(userLocation, selectedRequest.location) <= 2 ? (
+                      {selectedRequest.status === 'pending' && (
                         <button
-                          onClick={() => handleAcceptRequest(selectedRequest)}
+                          onClick={() => handleCancelRequest(selectedRequest)}
+                          disabled={isAccepting}
+                          className="w-full py-2.5 bg-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-300 transition-all flex items-center justify-center gap-2"
+                        >
+                          {isAccepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                          Cancel My Request
+                        </button>
+                      )}
+                      {selectedRequest.status === 'accepted' && (
+                        <button
+                          onClick={() => handleCompleteRequest(selectedRequest)}
                           disabled={isAccepting}
                           className="w-full py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-green-700 transition-all flex items-center justify-center gap-2"
                         >
                           {isAccepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                          Accept Request
+                          Help Received
                         </button>
-                      ) : (
-                        <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-start gap-2">
-                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                          <p className="text-[10px] text-amber-800 leading-tight">
-                            <strong>Out of Range:</strong> You must be within 2km to accept this request. You are currently {getDistance(userLocation, selectedRequest.location).toFixed(1)}km away.
-                          </p>
-                        </div>
                       )}
                     </>
-                  )}
+                  ) : (
+                    /* RESPONDER ACTIONS */
+                    <>
+                      {selectedRequest.status === 'pending' && (
+                        <>
+                          {getDistance(userLocation, selectedRequest.location) <= 2 ? (
+                            <button
+                              onClick={() => handleAcceptRequest(selectedRequest)}
+                              disabled={isAccepting}
+                              className="w-full py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-green-700 transition-all flex items-center justify-center gap-2"
+                            >
+                              {isAccepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                              Accept Request
+                            </button>
+                          ) : (
+                            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                              <p className="text-[10px] text-amber-800 leading-tight">
+                                <strong>Out of Range:</strong> You must be within 2km to accept this request. You are currently {getDistance(userLocation, selectedRequest.location).toFixed(1)}km away.
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      )}
 
-                  {selectedRequest.status === 'accepted' && (
-                    <button
-                      onClick={() => getDirections(selectedRequest.location)}
-                      className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
-                    >
-                      <Navigation className="w-4 h-4" />
-                      Get Directions
-                    </button>
+                      {selectedRequest.status === 'accepted' && (
+                        <>
+                          {selectedRequest.acceptedBy === auth.currentUser?.uid ? (
+                            <button
+                              onClick={() => getDirections(selectedRequest.location)}
+                              className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                            >
+                              <Navigation className="w-4 h-4" />
+                              Get Directions
+                            </button>
+                          ) : (
+                            <div className="bg-slate-100 border border-slate-200 p-3 rounded-xl flex items-center justify-center gap-2">
+                              <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                              <span className="text-xs font-bold text-slate-500">Help in Progress...</span>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
                   )}
                 </div>
                 
