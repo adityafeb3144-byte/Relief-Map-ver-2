@@ -7,10 +7,10 @@ import {
   InfoWindow,
   useMap
 } from '@vis.gl/react-google-maps';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { EmergencyRequest, UserLocation } from '../types';
-import { AlertCircle, Heart, Utensils, LifeBuoy, Bell } from 'lucide-react';
+import { AlertCircle, Heart, Utensils, LifeBuoy, Bell, Navigation, CheckCircle, Briefcase, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 
@@ -140,6 +140,7 @@ export default function MapComponent({ userLocation }: Props) {
   const [selectedRequest, setSelectedRequest] = useState<EmergencyRequest | null>(null);
   const [newRequestAlert, setNewRequestAlert] = useState<EmergencyRequest | null>(null);
   const [viewMode, setViewMode] = useState<'local' | 'global'>('local');
+  const [isAccepting, setIsAccepting] = useState(false);
   const isInitialLoad = useRef(true);
 
   useEffect(() => {
@@ -183,6 +184,38 @@ export default function MapComponent({ userLocation }: Props) {
 
     return () => unsubscribe();
   }, [userLocation, viewMode]); // Removed 'requests' from dependencies to prevent resubscription
+
+  const handleAcceptRequest = async (request: EmergencyRequest) => {
+    if (!auth.currentUser || isAccepting) return;
+
+    setIsAccepting(true);
+    try {
+      const requestRef = doc(db, 'requests', request.id);
+      await updateDoc(requestRef, {
+        status: 'accepted',
+        acceptedBy: auth.currentUser.uid,
+        acceptedByName: auth.currentUser.displayName || 'Anonymous Responder'
+      });
+      
+      // Update local state for the selected request
+      setSelectedRequest({
+        ...request,
+        status: 'accepted',
+        acceptedBy: auth.currentUser.uid,
+        acceptedByName: auth.currentUser.displayName || 'Anonymous Responder'
+      });
+    } catch (error) {
+      console.error("Error accepting request:", error);
+      handleFirestoreError(error, OperationType.UPDATE, `requests/${request.id}`);
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
+  const getDirections = (location: { lat: number, lng: number }) => {
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}`;
+    window.open(url, '_blank');
+  };
 
   const googleMapsApiKey = process.env.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
@@ -274,15 +307,22 @@ export default function MapComponent({ userLocation }: Props) {
               position={req.location}
               onClick={() => setSelectedRequest(req)}
             >
-              <Pin 
-                background={CategoryColor(req.category)} 
-                borderColor="#fff" 
-                glyphColor="#fff"
-              >
-                <div className="flex items-center justify-center text-white">
-                  <CategoryIcon category={req.category} />
-                </div>
-              </Pin>
+              <div className="relative">
+                <Pin 
+                  background={req.status === 'accepted' ? '#9E9E9E' : CategoryColor(req.category)} 
+                  borderColor="#fff" 
+                  glyphColor="#fff"
+                >
+                  <div className="flex items-center justify-center text-white">
+                    {req.status === 'accepted' ? <CheckCircle className="w-4 h-4" /> : <CategoryIcon category={req.category} />}
+                  </div>
+                </Pin>
+                {req.status === 'accepted' && (
+                  <div className="absolute -top-2 -right-2 bg-green-500 text-white p-0.5 rounded-full border border-white">
+                    <CheckCircle className="w-2 h-2" />
+                  </div>
+                )}
+              </div>
             </AdvancedMarker>
           ))}
 
@@ -291,17 +331,21 @@ export default function MapComponent({ userLocation }: Props) {
               position={selectedRequest.location}
               onCloseClick={() => setSelectedRequest(null)}
             >
-              <div className="p-3 max-w-xs text-black">
+              <div className="p-3 max-w-xs text-black overflow-y-auto max-h-[400px]">
                 <div className="flex items-center gap-2 mb-3">
                   <div 
                     className="p-1.5 rounded-full text-white"
-                    style={{ backgroundColor: CategoryColor(selectedRequest.category) }}
+                    style={{ backgroundColor: selectedRequest.status === 'accepted' ? '#9E9E9E' : CategoryColor(selectedRequest.category) }}
                   >
-                    <CategoryIcon category={selectedRequest.category} />
+                    {selectedRequest.status === 'accepted' ? <CheckCircle className="w-4 h-4" /> : <CategoryIcon category={selectedRequest.category} />}
                   </div>
                   <div className="flex flex-col">
-                    <span className="font-bold text-sm leading-none">{selectedRequest.category}</span>
-                    <span className="text-[10px] text-gray-500">Emergency Request</span>
+                    <span className="font-bold text-sm leading-none">
+                      {selectedRequest.status === 'accepted' ? 'Accepted' : selectedRequest.category}
+                    </span>
+                    <span className="text-[10px] text-gray-500">
+                      {selectedRequest.status === 'accepted' ? `By ${selectedRequest.acceptedByName}` : 'Emergency Request'}
+                    </span>
                   </div>
                   <span className="ml-auto text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full font-bold border border-red-200">
                     Urgency: {selectedRequest.urgency}
@@ -318,6 +362,48 @@ export default function MapComponent({ userLocation }: Props) {
                     referrerPolicy="no-referrer"
                   />
                 )}
+
+                {/* Recommended Tools Section */}
+                {selectedRequest.recommendedTools && selectedRequest.recommendedTools.length > 0 && (
+                  <div className="mb-4 bg-blue-50 p-3 rounded-xl border border-blue-100">
+                    <div className="flex items-center gap-2 mb-2 text-blue-800">
+                      <Briefcase className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Recommended Gear</span>
+                    </div>
+                    <ul className="space-y-1">
+                      {selectedRequest.recommendedTools.map((tool, i) => (
+                        <li key={i} className="text-xs text-blue-700 flex items-center gap-2">
+                          <div className="w-1 h-1 bg-blue-400 rounded-full" />
+                          {tool}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex flex-col gap-2 mb-4">
+                  {selectedRequest.status === 'pending' && selectedRequest.userId !== auth.currentUser?.uid && (
+                    <button
+                      onClick={() => handleAcceptRequest(selectedRequest)}
+                      disabled={isAccepting}
+                      className="w-full py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-green-700 transition-all flex items-center justify-center gap-2"
+                    >
+                      {isAccepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                      Accept Request
+                    </button>
+                  )}
+
+                  {selectedRequest.status === 'accepted' && (
+                    <button
+                      onClick={() => getDirections(selectedRequest.location)}
+                      className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Navigation className="w-4 h-4" />
+                      Get Directions
+                    </button>
+                  )}
+                </div>
                 
                 <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
                   <img 

@@ -65,6 +65,8 @@ export default function RequestHelpButton({ userLocation }: Props) {
           location: userLocation,
           category: finalCategory,
           urgency: finalUrgency,
+          status: 'pending',
+          recommendedTools: analysis.recommendedTools || [],
           createdAt: serverTimestamp(),
         });
       } catch (error) {

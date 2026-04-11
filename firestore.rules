@@ -33,8 +33,8 @@ service cloud.firestore {
     }
 
     function isValidRequest(data) {
-      let requiredFields = ['userId', 'message', 'location', 'category', 'urgency', 'createdAt'];
-      let allowedFields = ['userId', 'userName', 'userPhoto', 'message', 'imageUrl', 'location', 'category', 'urgency', 'createdAt'];
+      let requiredFields = ['userId', 'message', 'location', 'category', 'urgency', 'status', 'createdAt'];
+      let allowedFields = ['userId', 'userName', 'userPhoto', 'message', 'imageUrl', 'location', 'category', 'urgency', 'status', 'acceptedBy', 'acceptedByName', 'recommendedTools', 'createdAt'];
       
       return data.keys().hasAll(requiredFields) &&
              data.keys().hasOnly(allowedFields) &&
@@ -43,7 +43,17 @@ service cloud.firestore {
              data.location is map && data.location.lat is number && data.location.lng is number &&
              data.category in ['Food', 'Medical', 'Rescue', 'Other'] &&
              data.urgency is number && data.urgency >= 1 && data.urgency <= 10 &&
+             data.status in ['pending', 'accepted', 'completed'] &&
              data.createdAt is timestamp;
+    }
+
+    function isValidAcceptance(data, prevData) {
+      // Allow updating status to 'accepted' and setting acceptedBy fields
+      return data.diff(prevData).affectedKeys().hasOnly(['status', 'acceptedBy', 'acceptedByName']) &&
+             prevData.status == 'pending' &&
+             data.status == 'accepted' &&
+             data.acceptedBy == request.auth.uid &&
+             data.acceptedByName is string;
     }
 
     // ===============================================================
@@ -51,18 +61,15 @@ service cloud.firestore {
     // ===============================================================
 
     match /requests/{requestId} {
-      // Allow reading requests if authenticated
-      // In a real app, we might limit this to proximity, but Firestore rules can't easily do geo-queries.
-      // We rely on the client-side query and this basic auth check.
       allow read: if isAuthenticated();
       
-      // Allow creating a request if valid and user is the owner
       allow create: if isAuthenticated() && isValidRequest(request.resource.data);
       
-      // Allow updating only by the owner, and must remain valid
-      allow update: if isAuthenticated() && isOwner(resource.data.userId) && isValidRequest(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (isOwner(resource.data.userId) && isValidRequest(request.resource.data)) ||
+        isValidAcceptance(request.resource.data, resource.data)
+      );
       
-      // Allow deleting only by the owner
       allow delete: if isAuthenticated() && isOwner(resource.data.userId);
     }
 

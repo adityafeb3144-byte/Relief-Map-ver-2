@@ -11,6 +11,10 @@ export interface EmergencyRequest {
   };
   category: 'Food' | 'Medical' | 'Rescue' | 'Other';
   urgency: number;
+  status: 'pending' | 'accepted' | 'completed';
+  acceptedBy?: string;
+  acceptedByName?: string;
+  recommendedTools?: string[];
   createdAt: any; // Firestore Timestamp
 }
 

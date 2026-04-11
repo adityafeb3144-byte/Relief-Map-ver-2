@@ -9,7 +9,10 @@ export async function analyzeEmergency(message: string, base64Image?: string) {
 
   const model = "gemini-3-flash-preview";
   
-  const prompt = `Analyze this emergency request. Categorize it into one of: Food, Medical, Rescue, Other. Assign an urgency score from 1 to 10 (10 being most critical).
+  const prompt = `Analyze this emergency request. 
+  1. Categorize it into one of: Food, Medical, Rescue, Other. 
+  2. Assign an urgency score from 1 to 10 (10 being most critical).
+  3. Suggest 3-5 specific tools, items, or equipment a responder should bring to help (e.g., "First aid kit", "Bottled water", "Heavy duty rope").
   
   Request: "${message}"`;
 
@@ -40,8 +43,13 @@ export async function analyzeEmergency(message: string, base64Image?: string) {
               type: Type.NUMBER,
               description: "Score from 1 to 10",
             },
+            recommendedTools: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "List of 3-5 recommended items for responders",
+            },
           },
-          required: ["category", "urgency"],
+          required: ["category", "urgency", "recommendedTools"],
         },
       },
     });
