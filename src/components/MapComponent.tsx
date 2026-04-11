@@ -10,9 +10,10 @@ import {
 import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { EmergencyRequest, UserLocation } from '../types';
-import { AlertCircle, Heart, Utensils, LifeBuoy, Bell, Navigation, CheckCircle, Briefcase, Loader2 } from 'lucide-react';
+import { AlertCircle, Heart, Utensils, LifeBuoy, Bell, Navigation, CheckCircle, Briefcase, Loader2, XCircle, PartyPopper } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import confetti from 'canvas-confetti';
 
 const MAP_ID = "relief_map_dark";
 
@@ -141,6 +142,7 @@ export default function MapComponent({ userLocation }: Props) {
   const [newRequestAlert, setNewRequestAlert] = useState<EmergencyRequest | null>(null);
   const [viewMode, setViewMode] = useState<'local' | 'global'>('local');
   const [isAccepting, setIsAccepting] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
   const isInitialLoad = useRef(true);
 
   useEffect(() => {
@@ -204,7 +206,6 @@ export default function MapComponent({ userLocation }: Props) {
         acceptedByName: auth.currentUser.displayName || 'Anonymous Responder'
       });
       
-      // Update local state for the selected request
       setSelectedRequest({
         ...request,
         status: 'accepted',
@@ -213,6 +214,61 @@ export default function MapComponent({ userLocation }: Props) {
       });
     } catch (error) {
       console.error("Error accepting request:", error);
+      handleFirestoreError(error, OperationType.UPDATE, `requests/${request.id}`);
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
+  const handleCancelRequest = async (request: EmergencyRequest) => {
+    if (!auth.currentUser || isAccepting) return;
+    if (request.userId !== auth.currentUser.uid) return;
+
+    if (!confirm("Are you sure you want to cancel this help request?")) return;
+
+    setIsAccepting(true);
+    try {
+      const requestRef = doc(db, 'requests', request.id);
+      await updateDoc(requestRef, {
+        status: 'completed', // We use completed to hide it from active view
+        message: `[CANCELLED] ${request.message}`
+      });
+      setSelectedRequest(null);
+    } catch (error) {
+      console.error("Error cancelling request:", error);
+      handleFirestoreError(error, OperationType.UPDATE, `requests/${request.id}`);
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
+  const handleCompleteRequest = async (request: EmergencyRequest) => {
+    if (!auth.currentUser || isAccepting) return;
+    
+    // Only the requester or the responder can complete it
+    if (request.userId !== auth.currentUser.uid && request.acceptedBy !== auth.currentUser.uid) return;
+
+    setIsAccepting(true);
+    try {
+      const requestRef = doc(db, 'requests', request.id);
+      await updateDoc(requestRef, {
+        status: 'completed'
+      });
+
+      // Trigger Celebration
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#4CAF50', '#2196F3', '#FFEB3B']
+      });
+      
+      setShowCelebration(true);
+      setTimeout(() => setShowCelebration(false), 5000);
+      
+      setSelectedRequest(null);
+    } catch (error) {
+      console.error("Error completing request:", error);
       handleFirestoreError(error, OperationType.UPDATE, `requests/${request.id}`);
     } finally {
       setIsAccepting(false);
@@ -242,6 +298,23 @@ export default function MapComponent({ userLocation }: Props) {
     <APIProvider apiKey={googleMapsApiKey}>
       <div className="w-full h-screen relative">
         <AnimatePresence>
+          {showCelebration && (
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              className="absolute inset-0 z-[100] flex items-center justify-center pointer-events-none"
+            >
+              <div className="bg-white/90 backdrop-blur-md p-8 rounded-3xl shadow-2xl text-center border-4 border-green-500">
+                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <PartyPopper className="w-12 h-12 text-green-600" />
+                </div>
+                <h2 className="text-3xl font-black text-slate-900 mb-2">Help Received!</h2>
+                <p className="text-slate-600 font-bold">Another life helped by the community.</p>
+              </div>
+            </motion.div>
+          )}
+
           {newRequestAlert && (
             <motion.div
               initial={{ y: -100, x: '-50%', opacity: 0 }}
@@ -308,7 +381,7 @@ export default function MapComponent({ userLocation }: Props) {
           </AdvancedMarker>
 
           {/* Emergency Markers */}
-          {filteredRequests.map((req) => (
+          {filteredRequests.filter(r => r.status !== 'completed').map((req) => (
             <AdvancedMarker
               key={req.id}
               position={req.location}
@@ -390,6 +463,30 @@ export default function MapComponent({ userLocation }: Props) {
 
                 {/* Action Buttons */}
                 <div className="flex flex-col gap-2 mb-4">
+                  {/* Requester can cancel */}
+                  {selectedRequest.status === 'pending' && selectedRequest.userId === auth.currentUser?.uid && (
+                    <button
+                      onClick={() => handleCancelRequest(selectedRequest)}
+                      disabled={isAccepting}
+                      className="w-full py-2.5 bg-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-300 transition-all flex items-center justify-center gap-2"
+                    >
+                      {isAccepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                      Cancel My Request
+                    </button>
+                  )}
+
+                  {/* Responder or Requester can complete */}
+                  {selectedRequest.status === 'accepted' && (selectedRequest.userId === auth.currentUser?.uid || selectedRequest.acceptedBy === auth.currentUser?.uid) && (
+                    <button
+                      onClick={() => handleCompleteRequest(selectedRequest)}
+                      disabled={isAccepting}
+                      className="w-full py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-green-700 transition-all flex items-center justify-center gap-2"
+                    >
+                      {isAccepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                      Help Received / Mission Complete
+                    </button>
+                  )}
+
                   {selectedRequest.status === 'pending' && selectedRequest.userId !== auth.currentUser?.uid && (
                     <>
                       {getDistance(userLocation, selectedRequest.location) <= 2 ? (
