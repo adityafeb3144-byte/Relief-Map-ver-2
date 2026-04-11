@@ -10,6 +10,8 @@ import { motion, AnimatePresence } from 'motion/react';
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [location, setLocation] = useState<UserLocation | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
 
@@ -19,7 +21,13 @@ export default function App() {
       setLoading(false);
     });
 
-    // Get user location
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Get user location only after login
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -38,15 +46,24 @@ export default function App() {
     } else {
       setLocationError("Geolocation is not supported by your browser.");
     }
-
-    return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   const handleLogin = async () => {
+    setLoginLoading(true);
+    setLoginError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error);
+      if (error.code === 'auth/unauthorized-domain') {
+        setLoginError("This domain is not authorized in Firebase. Please add " + window.location.hostname + " to your Firebase Authorized Domains.");
+      } else if (error.code === 'auth/popup-blocked') {
+        setLoginError("Sign-in popup was blocked. Please allow popups for this site.");
+      } else {
+        setLoginError(error.message || "An unexpected error occurred during sign-in.");
+      }
+    } finally {
+      setLoginLoading(false);
     }
   };
 
@@ -71,15 +88,27 @@ export default function App() {
             <ShieldAlert className="w-12 h-12 text-on-primary-container" />
           </div>
           <h1 className="text-5xl font-bold mb-4 tracking-tight">Relief-Map</h1>
-          <p className="text-on-surface-variant text-lg mb-12">
+          <p className="text-on-surface-variant text-lg mb-8">
             Real-time emergency response network. Connect with help when every second counts.
           </p>
+
+          {loginError && (
+            <div className="mb-8 p-4 bg-error-container text-on-error-container rounded-2xl text-sm border border-error/20">
+              {loginError}
+            </div>
+          )}
+
           <button
             onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-primary text-on-primary rounded-full text-xl font-bold shadow-lg hover:bg-opacity-90 transition-all"
+            disabled={loginLoading}
+            className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-primary text-on-primary rounded-full text-xl font-bold shadow-lg hover:bg-opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <LogIn className="w-6 h-6" />
-            Sign in with Google
+            {loginLoading ? (
+              <Loader2 className="w-6 h-6 animate-spin" />
+            ) : (
+              <LogIn className="w-6 h-6" />
+            )}
+            {loginLoading ? "Signing in..." : "Sign in with Google"}
           </button>
         </motion.div>
       </div>
