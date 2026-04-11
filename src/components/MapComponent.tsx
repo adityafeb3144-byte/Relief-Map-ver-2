@@ -8,7 +8,7 @@ import {
   useMap
 } from '@vis.gl/react-google-maps';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { EmergencyRequest, UserLocation } from '../types';
 import { AlertCircle, Heart, Utensils, LifeBuoy, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -144,24 +144,35 @@ export default function MapComponent({ userLocation }: Props) {
 
   useEffect(() => {
     const q = query(collection(db, 'requests'), orderBy('createdAt', 'desc'));
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const allRequests = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as EmergencyRequest[];
       
-      const nearby = allRequests.filter(req => 
-        getDistance(userLocation, req.location) <= 2
-      );
-      
-      // Check for new requests if not initial load
+      // Use docChanges to detect NEW additions specifically
       if (!isInitialLoad.current) {
-        const newOnes = nearby.filter(req => !requests.find(r => r.id === req.id));
-        if (newOnes.length > 0) {
-          setNewRequestAlert(newOnes[0]);
-          setTimeout(() => setNewRequestAlert(null), 5000);
-        }
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const newReq = { id: change.doc.id, ...change.doc.data() } as EmergencyRequest;
+            
+            // Notify if it's not our own request
+            if (newReq.userId !== auth.currentUser?.uid) {
+              // If in local mode, check distance. If in global mode, notify all.
+              const distance = getDistance(userLocation, newReq.location);
+              if (viewMode === 'global' || distance <= 5) { // Increased to 5km for better testing
+                setNewRequestAlert(newReq);
+                setTimeout(() => setNewRequestAlert(null), 8000); // Show for 8 seconds
+              }
+            }
+          }
+        });
       }
+      
+      const nearby = allRequests.filter(req => 
+        getDistance(userLocation, req.location) <= 5 // Match the 5km radius
+      );
       
       setRequests(allRequests);
       setFilteredRequests(viewMode === 'local' ? nearby : allRequests);
@@ -171,9 +182,9 @@ export default function MapComponent({ userLocation }: Props) {
     });
 
     return () => unsubscribe();
-  }, [userLocation, requests, viewMode]);
+  }, [userLocation, viewMode]); // Removed 'requests' from dependencies to prevent resubscription
 
-  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+  const googleMapsApiKey = process.env.VITE_GOOGLE_MAPS_API_KEY || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
   if (!googleMapsApiKey) {
     return (
