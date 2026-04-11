@@ -74,6 +74,13 @@ Relief-Map is a real-time emergency response web application built for the GDG H
 
 ## Deployment 🌐
 
+### Vercel (Recommended)
+
+1.  **Push your code** to a GitHub repository.
+2.  **Import the project** into Vercel.
+3.  **Environment Variables**: Add `GEMINI_API_KEY` and `VITE_GOOGLE_MAPS_API_KEY` in the Vercel project settings.
+4.  **Build Settings**: Vercel will automatically detect Vite. The build command is `npm run build` and the output directory is `dist`.
+
 ### Google Cloud Run
 
 This project is ready for Cloud Run. Ensure your environment variables are set in the Cloud Run service configuration.

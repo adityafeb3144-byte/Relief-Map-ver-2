@@ -172,7 +172,7 @@ export default function MapComponent({ userLocation }: Props) {
   }, [userLocation, requests, viewMode]);
 
   return (
-    <APIProvider apiKey={process.env.VITE_GOOGLE_MAPS_API_KEY || ""}>
+    <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""}>
       <div className="w-full h-screen relative">
         <AnimatePresence>
           {newRequestAlert && (
