@@ -171,8 +171,22 @@ export default function MapComponent({ userLocation }: Props) {
     return () => unsubscribe();
   }, [userLocation, requests, viewMode]);
 
+  const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+
+  if (!googleMapsApiKey) {
+    return (
+      <div className="w-full h-screen flex flex-col items-center justify-center bg-slate-900 text-white p-6 text-center">
+        <AlertCircle className="w-16 h-16 text-yellow-500 mb-4" />
+        <h2 className="text-2xl font-bold mb-2">Google Maps Key Missing</h2>
+        <p className="text-slate-400 max-w-md">
+          Please set the VITE_GOOGLE_MAPS_API_KEY environment variable to enable the map view.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <APIProvider apiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""}>
+    <APIProvider apiKey={googleMapsApiKey}>
       <div className="w-full h-screen relative">
         <AnimatePresence>
           {newRequestAlert && (

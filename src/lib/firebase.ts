@@ -16,6 +16,12 @@ const firebaseConfig = {
 
 const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseConfigJson.firestoreDatabaseId || "(default)";
 
+// Debug logging (safe)
+console.log("Firebase Initializing with Project ID:", firebaseConfig.projectId);
+if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("TODO")) {
+  console.error("CRITICAL: Firebase API Key is missing or invalid!");
+}
+
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app, databaseId);
