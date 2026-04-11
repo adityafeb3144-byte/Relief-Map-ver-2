@@ -160,9 +160,9 @@ export default function MapComponent({ userLocation }: Props) {
             
             // Notify if it's not our own request
             if (newReq.userId !== auth.currentUser?.uid) {
-              // If in local mode, check distance. If in global mode, notify all.
               const distance = getDistance(userLocation, newReq.location);
-              if (viewMode === 'global' || distance <= 5) { // Increased to 5km for better testing
+              // STRICT PROTOCOL: Only notify if within 2km
+              if (distance <= 2) {
                 setNewRequestAlert(newReq);
                 setTimeout(() => setNewRequestAlert(null), 8000); // Show for 8 seconds
               }
@@ -172,7 +172,7 @@ export default function MapComponent({ userLocation }: Props) {
       }
       
       const nearby = allRequests.filter(req => 
-        getDistance(userLocation, req.location) <= 5 // Match the 5km radius
+        getDistance(userLocation, req.location) <= 2 // STRICT PROTOCOL: 2km radius
       );
       
       setRequests(allRequests);
@@ -187,6 +187,13 @@ export default function MapComponent({ userLocation }: Props) {
 
   const handleAcceptRequest = async (request: EmergencyRequest) => {
     if (!auth.currentUser || isAccepting) return;
+
+    // STRICT PROTOCOL: Double check distance before allowing acceptance
+    const distance = getDistance(userLocation, request.location);
+    if (distance > 2) {
+      alert(`You are too far away (${distance.toFixed(1)}km) to accept this request. You must be within 2km.`);
+      return;
+    }
 
     setIsAccepting(true);
     try {
@@ -384,14 +391,25 @@ export default function MapComponent({ userLocation }: Props) {
                 {/* Action Buttons */}
                 <div className="flex flex-col gap-2 mb-4">
                   {selectedRequest.status === 'pending' && selectedRequest.userId !== auth.currentUser?.uid && (
-                    <button
-                      onClick={() => handleAcceptRequest(selectedRequest)}
-                      disabled={isAccepting}
-                      className="w-full py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-green-700 transition-all flex items-center justify-center gap-2"
-                    >
-                      {isAccepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                      Accept Request
-                    </button>
+                    <>
+                      {getDistance(userLocation, selectedRequest.location) <= 2 ? (
+                        <button
+                          onClick={() => handleAcceptRequest(selectedRequest)}
+                          disabled={isAccepting}
+                          className="w-full py-2.5 bg-green-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-green-700 transition-all flex items-center justify-center gap-2"
+                        >
+                          {isAccepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                          Accept Request
+                        </button>
+                      ) : (
+                        <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <p className="text-[10px] text-amber-800 leading-tight">
+                            <strong>Out of Range:</strong> You must be within 2km to accept this request. You are currently {getDistance(userLocation, selectedRequest.location).toFixed(1)}km away.
+                          </p>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {selectedRequest.status === 'accepted' && (
